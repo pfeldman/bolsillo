@@ -1,0 +1,13 @@
+{
+  "buildCommand": "",
+  "installCommand": "npm install",
+  "framework": null,
+  "outputDirectory": "public",
+  "rewrites": [
+    { "source": "/api/gastos/export/csv", "destination": "/api/gastos/export/csv" },
+    { "source": "/api/gastos/:id", "destination": "/api/gastos/[id]" },
+    { "source": "/api/gastos", "destination": "/api/gastos/index" },
+    { "source": "/api/config", "destination": "/api/config" },
+    { "source": "/api/limits/current", "destination": "/api/limits/current" }
+  ]
+}
