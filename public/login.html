@@ -282,11 +282,11 @@
 
         <div class="login-card">
             <div class="mode-toggle">
-                <button id="mode-login" class="active" onclick="setMode('login')">Iniciar Sesion</button>
-                <button id="mode-register" onclick="setMode('register')">Registrarse</button>
+                <button id="mode-login" class="active">Iniciar Sesion</button>
+                <button id="mode-register">Registrarse</button>
             </div>
 
-            <form id="auth-form" onsubmit="handleAuth(event)">
+            <form id="auth-form">
                 <div class="form-group">
                     <label for="email">Email</label>
                     <input type="email" id="email" placeholder="tu@email.com" required autocomplete="email">
@@ -312,7 +312,7 @@
                 <span>o</span>
             </div>
 
-            <button class="google-btn" onclick="signInWithGoogle()">
+            <button class="google-btn" id="google-btn">
                 <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                     <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
                     <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
@@ -324,12 +324,13 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase-js.min.js"></script>
-    <script>
+    <script type="module">
+        import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
         const SUPABASE_URL = 'https://fqelzbjdseukdujnxeqg.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZxZWx6Ympkc2V1a2R1am54ZXFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0NzgxMjgsImV4cCI6MjA4ODA1NDEyOH0.ZMa1JDS8OM3VUhEedRIMsoU2iHbbWuzF_yNVQjjON5Q';
 
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         let currentMode = 'login';
 
@@ -427,6 +428,12 @@
                 document.getElementById('error-msg').textContent = error.message;
             }
         }
+
+        // Bind event listeners
+        document.getElementById('mode-login').addEventListener('click', () => setMode('login'));
+        document.getElementById('mode-register').addEventListener('click', () => setMode('register'));
+        document.getElementById('auth-form').addEventListener('submit', handleAuth);
+        document.getElementById('google-btn').addEventListener('click', signInWithGoogle);
     </script>
 </body>
 </html>

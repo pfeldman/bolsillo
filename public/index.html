@@ -341,14 +341,15 @@
         </form>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase-js.min.js"></script>
-    <script>
-        // Initialize Supabase and check auth before loading app
-        (async () => {
-            const SUPABASE_URL = 'https://fqelzbjdseukdujnxeqg.supabase.co';
-            const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZxZWx6Ympkc2V1a2R1am54ZXFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0NzgxMjgsImV4cCI6MjA4ODA1NDEyOH0.ZMa1JDS8OM3VUhEedRIMsoU2iHbbWuzF_yNVQjjON5Q';
+    <script type="module">
+        import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 
-            const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        // Initialize Supabase and check auth before loading app
+        const SUPABASE_URL = 'https://fqelzbjdseukdujnxeqg.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZxZWx6Ympkc2V1a2R1am54ZXFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0NzgxMjgsImV4cCI6MjA4ODA1NDEyOH0.ZMa1JDS8OM3VUhEedRIMsoU2iHbbWuzF_yNVQjjON5Q';
+
+        const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        (async () => {
             const { data: { session } } = await sb.auth.getSession();
 
             if (!session) {
