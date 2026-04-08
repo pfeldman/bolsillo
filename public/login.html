@@ -417,15 +417,68 @@
             }
         }
 
+        function isNative() {
+            if (typeof window === 'undefined') return false;
+            const cap = window.Capacitor;
+            return !!cap?.isNativePlatform?.();
+        }
+
         async function signInWithGoogle() {
-            const { error } = await supabase.auth.signInWithOAuth({
-                provider: 'google',
-                options: {
-                    redirectTo: window.location.origin + '/auth-callback.html'
+            if (isNative()) {
+                try {
+                    const { Browser } = await import('https://cdn.jsdelivr.net/npm/@capacitor/browser@8/+esm');
+                    const { App: CapApp } = await import('https://cdn.jsdelivr.net/npm/@capacitor/app@8/+esm');
+
+                    const { data, error } = await supabase.auth.signInWithOAuth({
+                        provider: 'google',
+                        options: {
+                            skipBrowserRedirect: true,
+                            redirectTo: 'com.pieve.bolsillo://login-callback',
+                        },
+                    });
+                    if (error || !data?.url) throw error || new Error('No OAuth URL');
+
+                    const listener = await CapApp.addListener('appUrlOpen', async ({ url }) => {
+                        if (url.includes('login-callback')) {
+                            await Browser.close();
+                            listener.remove();
+                            const hashPart = url.split('#')[1];
+                            if (hashPart) {
+                                const params = new URLSearchParams(hashPart);
+                                const access_token = params.get('access_token');
+                                const refresh_token = params.get('refresh_token');
+                                if (access_token && refresh_token) {
+                                    await supabase.auth.setSession({ access_token, refresh_token });
+                                    window.location.href = '/index.html';
+                                    return;
+                                }
+                            }
+                            const queryPart = url.split('?')[1]?.split('#')[0];
+                            if (queryPart) {
+                                const params = new URLSearchParams(queryPart);
+                                const code = params.get('code');
+                                if (code) {
+                                    await supabase.auth.exchangeCodeForSession(code);
+                                    window.location.href = '/index.html';
+                                    return;
+                                }
+                            }
+                        }
+                    });
+                    await Browser.open({ url: data.url });
+                } catch (err) {
+                    document.getElementById('error-msg').textContent = err.message || 'Error con Google Sign-In';
                 }
-            });
-            if (error) {
-                document.getElementById('error-msg').textContent = error.message;
+            } else {
+                const { error } = await supabase.auth.signInWithOAuth({
+                    provider: 'google',
+                    options: {
+                        redirectTo: window.location.origin + '/auth-callback.html'
+                    }
+                });
+                if (error) {
+                    document.getElementById('error-msg').textContent = error.message;
+                }
             }
         }
 

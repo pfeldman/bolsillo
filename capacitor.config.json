@@ -1,0 +1,10 @@
+{
+  "appId": "com.pieve.bolsillo",
+  "appName": "Ledge",
+  "webDir": "public",
+  "server": {
+    "url": "https://bolsillo-zeta.vercel.app",
+    "cleartext": false,
+    "allowNavigation": ["*"]
+  }
+}
