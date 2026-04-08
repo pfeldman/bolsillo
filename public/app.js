@@ -131,6 +131,7 @@ function setupEventListeners() {
     setupMoneyInputFormatting('currency-multiplier');
 
     setupBottomSheet();
+    setupShareModal();
 }
 
 function switchPage(page) {
@@ -200,7 +201,11 @@ function updateCategoryDisplay(data) {
 
     // Store categories for other uses (expense form, filters)
     if (data.categories && data.categories.length > 0) {
-        appCategories = data.categories.map(c => ({ id: c.id, name: c.name, icon: c.icon, color: c.color }));
+        appCategories = data.categories.map(c => ({
+            id: c.id, name: c.name, icon: c.icon, color: c.color,
+            isShared: c.isShared, isOwner: c.isOwner, owner_id: c.owner_id,
+            shared_with: c.shared_with || [],
+        }));
         updateCategoryPills();
         updateCategoryFilterOptions();
     }
@@ -224,9 +229,14 @@ function updateCategoryDisplay(data) {
             weeklyHtml = buildWeeklyBreakdownHtml(cat.id, cat.weeklyBreakdown, cat.color);
         }
 
+        // Shared badge
+        const sharedBadge = cat.isShared
+            ? `<span class="card-shared-badge"><span class="shared-icon">👥</span>${(cat.shared_with || []).length + 1}</span>`
+            : '';
+
         card.innerHTML = `
             <div class="card-top">
-                <div class="card-label">${index === 0 ? `<span class="clickable-title" onclick="window.location.reload()">${cat.name.toUpperCase()}</span>` : cat.name.toUpperCase()}</div>
+                <div class="card-label">${index === 0 ? `<span class="clickable-title" onclick="window.location.reload()">${cat.name.toUpperCase()}</span>` : cat.name.toUpperCase()}${sharedBadge}</div>
                 <div class="card-icon" style="background: ${hexToRgba(cat.color || '#059669', 0.15)}; color: ${cat.color || '#059669'};">
                     <span style="font-size: 18px; line-height: 1;">${cat.icon || '💰'}</span>
                 </div>
@@ -570,13 +580,17 @@ async function loadConfig() {
             ];
         }
 
-        // Store globally
-        appCategories = categories.map(c => ({ id: c.id, name: c.name, icon: c.icon || '💰', color: c.color || '#059669' }));
+        // Store globally (include sharing info)
+        appCategories = categories.map(c => ({
+            id: c.id, name: c.name, icon: c.icon || '💰', color: c.color || '#059669',
+            isShared: c.isShared || false, isOwner: c.isOwner !== false,
+            owner_id: c.owner_id || null, shared_with: c.shared_with || [],
+        }));
         updateCategoryPills();
         updateCategoryFilterOptions();
 
-        // Render categories in settings
-        renderCategoriesConfig(categories);
+        // Render categories in settings (own + shared)
+        renderCategoriesConfig(categories, config.sharedCategories || []);
 
         // Set week start day if it exists
         if (config.weekStartDay !== undefined) {
@@ -602,7 +616,7 @@ async function loadConfig() {
     }
 }
 
-function renderCategoriesConfig(categories) {
+function renderCategoriesConfig(categories, sharedCategories = []) {
     const container = document.getElementById('categories-config-list');
     container.innerHTML = '';
     // Clean up old Cleave instances
@@ -612,6 +626,20 @@ function renderCategoriesConfig(categories) {
         const row = createCategoryConfigRow(cat, index);
         container.appendChild(row);
     });
+
+    // Render shared categories (from other users) below own categories
+    if (sharedCategories.length > 0) {
+        const sharedHeader = document.createElement('div');
+        sharedHeader.className = 'settings-header';
+        sharedHeader.style.marginTop = '16px';
+        sharedHeader.textContent = 'COMPARTIDAS CONMIGO';
+        container.appendChild(sharedHeader);
+
+        sharedCategories.forEach(cat => {
+            const card = createSharedCategoryCard(cat);
+            container.appendChild(card);
+        });
+    }
 }
 
 function createCategoryConfigRow(cat, index) {
@@ -619,18 +647,33 @@ function createCategoryConfigRow(cat, index) {
     wrapper.className = 'settings-card category-config-card';
     wrapper.dataset.index = index;
 
+    const sharedCount = (cat.shared_with && cat.shared_with.length > 0) ? cat.shared_with.length : 0;
+    const sharedBadgeHtml = sharedCount > 0
+        ? `<span class="card-shared-badge" style="margin-left:0; margin-right:4px;"><span class="shared-icon">👥</span>${sharedCount}</span>`
+        : '';
+
     wrapper.innerHTML = `
         <div class="category-config-header">
             <div class="category-config-icon-color">
                 <input type="text" class="category-icon-input" value="${cat.icon || '💰'}" maxlength="4" title="Emoji">
                 <input type="color" class="category-color-input" value="${cat.color || '#059669'}" title="Color">
             </div>
-            <button type="button" class="category-delete-btn" title="Eliminar categoría">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="3,6 5,6 21,6"/>
-                    <path d="M19,6v14a2,2 0,0,1-2,2H7a2,2 0,0,1-2-2V6m3,0V4a2,2 0,0,1,2-2h4a2,2 0,0,1,2,2v2"/>
-                </svg>
-            </button>
+            <div style="display:flex;align-items:center;gap:4px;">
+                ${sharedBadgeHtml}
+                <button type="button" class="category-share-btn" title="Compartir" data-category-id="${cat.id || ''}">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+                        <polyline points="16 6 12 2 8 6"/>
+                        <line x1="12" y1="2" x2="12" y2="15"/>
+                    </svg>
+                </button>
+                <button type="button" class="category-delete-btn" title="Eliminar categoría">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3,6 5,6 21,6"/>
+                        <path d="M19,6v14a2,2 0,0,1-2,2H7a2,2 0,0,1-2-2V6m3,0V4a2,2 0,0,1,2-2h4a2,2 0,0,1,2,2v2"/>
+                    </svg>
+                </button>
+            </div>
         </div>
         <div class="settings-row">
             <label>Nombre</label>
@@ -654,6 +697,16 @@ function createCategoryConfigRow(cat, index) {
             return;
         }
         wrapper.remove();
+    });
+
+    // Share button handler
+    const shareBtn = wrapper.querySelector('.category-share-btn');
+    shareBtn.addEventListener('click', () => {
+        const catId = shareBtn.dataset.categoryId;
+        const catName = wrapper.querySelector('.category-name-input').value.trim();
+        // Find full category data from appCategories (to get shared_with)
+        const catData = appCategories.find(c => c.id === catId) || {};
+        openShareModal(catId || slugify(catName), catName, catData.shared_with || [], true);
     });
 
     // Setup Cleave.js for the limit input after it's in the DOM
@@ -712,14 +765,20 @@ function collectCategoriesFromConfig() {
             : parseFormattedNumber(limitInput.value);
         const icon = card.querySelector('.category-icon-input').value.trim() || '💰';
         const color = card.querySelector('.category-color-input').value || '#059669';
+        const catId = slugify(name);
 
         if (name) {
+            // Preserve shared_with from existing appCategories data
+            const existing = appCategories.find(c => c.id === catId);
+            const shared_with = (existing && existing.shared_with) ? existing.shared_with : [];
+
             categories.push({
-                id: slugify(name),
+                id: catId,
                 name: name,
                 limit: parseFloat(limitValue) || 0,
                 icon: icon,
                 color: color,
+                shared_with: shared_with,
             });
         }
     });
@@ -953,4 +1012,219 @@ function openBottomSheet() {
 function closeBottomSheet() {
     document.getElementById('bottom-sheet').classList.remove('active');
     document.getElementById('bottom-sheet-backdrop').classList.remove('active');
+}
+
+// ===== Shared category card (for categories shared WITH you from others) =====
+
+function createSharedCategoryCard(cat) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'settings-card category-shared-card';
+
+    wrapper.innerHTML = `
+        <div class="category-config-header">
+            <div class="category-config-icon-color">
+                <span style="font-size:22px; width:44px; height:38px; display:flex; align-items:center; justify-content:center;">${cat.icon || '💰'}</span>
+                <span style="width:38px; height:38px; border-radius:10px; background:${cat.color || '#059669'}; display:inline-block;"></span>
+            </div>
+            <button type="button" class="category-leave-btn" data-category-id="${cat.id}" data-owner-id="${cat.owner_id}">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                    <polyline points="16 17 21 12 16 7"/>
+                    <line x1="21" y1="12" x2="9" y2="12"/>
+                </svg>
+                Salir
+            </button>
+        </div>
+        <div class="settings-row">
+            <label>${cat.name}</label>
+            <span style="font-size:14px; color:var(--text-tertiary);">$${formatNumber(cat.limit)}/mes</span>
+        </div>
+        <div class="shared-card-owner">
+            <span>👥</span> Compartida · ${(cat.shared_with || []).length + 1} miembros
+        </div>
+    `;
+
+    // Leave button handler
+    const leaveBtn = wrapper.querySelector('.category-leave-btn');
+    leaveBtn.addEventListener('click', async () => {
+        if (!confirm('¿Salir de esta categoria compartida?')) return;
+        try {
+            const response = await authFetch(`${API_URL}/categories/share`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    categoryId: leaveBtn.dataset.categoryId,
+                    ownerId: leaveBtn.dataset.ownerId,
+                }),
+            });
+            if (!response) return;
+            if (response.ok) {
+                showNotification('Saliste de la categoria', 'success');
+                loadConfig();
+                loadDashboard();
+            } else {
+                const err = await response.json();
+                showNotification(err.error || 'Error al salir', 'error');
+            }
+        } catch (error) {
+            console.error('Error leaving category:', error);
+            showNotification('Error al salir de la categoria', 'error');
+        }
+    });
+
+    return wrapper;
+}
+
+// ===== Share Modal =====
+
+let shareModalCategoryId = null;
+let shareModalIsOwner = false;
+
+function setupShareModal() {
+    document.getElementById('share-modal-backdrop').addEventListener('click', closeShareModal);
+    document.getElementById('share-modal-close').addEventListener('click', closeShareModal);
+    document.getElementById('share-add-btn').addEventListener('click', handleShareInvite);
+
+    // Allow Enter key in email input
+    document.getElementById('share-email-input').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleShareInvite();
+        }
+    });
+}
+
+function openShareModal(categoryId, categoryName, sharedWith, isOwner) {
+    shareModalCategoryId = categoryId;
+    shareModalIsOwner = isOwner;
+
+    document.getElementById('share-modal-title').textContent = `Compartir: ${categoryName}`;
+    document.getElementById('share-email-input').value = '';
+
+    renderShareMembers(sharedWith, isOwner);
+
+    document.getElementById('share-modal').classList.add('active');
+    document.getElementById('share-modal-backdrop').classList.add('active');
+
+    // Focus email input
+    requestAnimationFrame(() => {
+        document.getElementById('share-email-input').focus();
+    });
+}
+
+function closeShareModal() {
+    document.getElementById('share-modal').classList.remove('active');
+    document.getElementById('share-modal-backdrop').classList.remove('active');
+    shareModalCategoryId = null;
+}
+
+function renderShareMembers(sharedWith, isOwner) {
+    const list = document.getElementById('share-members-list');
+    list.innerHTML = '';
+
+    if (!sharedWith || sharedWith.length === 0) {
+        list.innerHTML = '<div style="text-align:center; color:var(--text-tertiary); padding:12px; font-size:14px;">Nadie mas tiene acceso</div>';
+        return;
+    }
+
+    sharedWith.forEach(member => {
+        const item = document.createElement('div');
+        item.className = 'share-member-item';
+
+        const initial = (member.email || '?')[0].toUpperCase();
+
+        item.innerHTML = `
+            <div class="share-member-info">
+                <div class="share-member-avatar">${initial}</div>
+                <div>
+                    <div class="share-member-email">${member.email}</div>
+                    <div class="share-member-role">Miembro</div>
+                </div>
+            </div>
+            ${isOwner ? `<button class="share-member-remove" data-user-id="${member.user_id}" title="Eliminar">&times;</button>` : ''}
+        `;
+
+        if (isOwner) {
+            const removeBtn = item.querySelector('.share-member-remove');
+            removeBtn.addEventListener('click', () => handleShareRemove(member.user_id, member.email));
+        }
+
+        list.appendChild(item);
+    });
+}
+
+async function handleShareInvite() {
+    const emailInput = document.getElementById('share-email-input');
+    const email = emailInput.value.trim();
+    if (!email) {
+        showNotification('Ingresa un email', 'error');
+        return;
+    }
+
+    if (!shareModalCategoryId) return;
+
+    const btn = document.getElementById('share-add-btn');
+    btn.disabled = true;
+    btn.textContent = 'Invitando...';
+
+    try {
+        const response = await authFetch(`${API_URL}/categories/share`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                categoryId: shareModalCategoryId,
+                email: email,
+            }),
+        });
+        if (!response) return;
+
+        const result = await response.json();
+        if (response.ok) {
+            showNotification('Categoria compartida', 'success');
+            emailInput.value = '';
+            // Update the members list
+            renderShareMembers(result.shared_with, shareModalIsOwner);
+            // Refresh config to update badges
+            loadConfig();
+            loadDashboard();
+        } else {
+            showNotification(result.error || 'Error al compartir', 'error');
+        }
+    } catch (error) {
+        console.error('Error sharing category:', error);
+        showNotification('Error al compartir', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Invitar';
+    }
+}
+
+async function handleShareRemove(userId, email) {
+    if (!confirm(`¿Eliminar a ${email}?`)) return;
+    if (!shareModalCategoryId) return;
+
+    try {
+        const response = await authFetch(`${API_URL}/categories/share`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                categoryId: shareModalCategoryId,
+                userId: userId,
+            }),
+        });
+        if (!response) return;
+
+        const result = await response.json();
+        if (response.ok) {
+            showNotification('Usuario eliminado', 'success');
+            renderShareMembers(result.shared_with, shareModalIsOwner);
+            loadConfig();
+            loadDashboard();
+        } else {
+            showNotification(result.error || 'Error al eliminar', 'error');
+        }
+    } catch (error) {
+        console.error('Error removing share:', error);
+        showNotification('Error al eliminar usuario', 'error');
+    }
 }

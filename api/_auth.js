@@ -14,6 +14,8 @@ function getSupabaseAdmin() {
   return supabaseAdmin;
 }
 
+export { getSupabaseAdmin };
+
 export async function verifyAuth(req) {
   const authHeader = req.headers['authorization'] || req.headers['Authorization'];
   if (!authHeader || !authHeader.startsWith('Bearer ')) {

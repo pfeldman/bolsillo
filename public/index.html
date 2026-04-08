@@ -237,6 +237,27 @@
         </nav>
     </div>
 
+    <!-- Share Modal -->
+    <div class="share-modal-backdrop" id="share-modal-backdrop"></div>
+    <div class="share-modal" id="share-modal">
+        <div class="share-modal-header">
+            <h3 id="share-modal-title">Compartir categor&iacute;a</h3>
+            <button class="share-modal-close" id="share-modal-close">&times;</button>
+        </div>
+        <div id="share-modal-content">
+            <div class="share-input-row">
+                <input type="email" id="share-email-input" placeholder="Email del usuario" autocomplete="email">
+                <button class="share-add-btn" id="share-add-btn">Invitar</button>
+            </div>
+            <div id="share-members-list" class="share-members-list">
+                <!-- Rendered dynamically -->
+            </div>
+        </div>
+        <div id="share-modal-loading" class="share-modal-loading" style="display: none;">
+            <div class="loading-spinner" style="width:24px;height:24px;border-width:2px;"></div>
+        </div>
+    </div>
+
     <!-- Bottom Sheet -->
     <div class="bottom-sheet-backdrop" id="bottom-sheet-backdrop"></div>
     <div class="bottom-sheet" id="bottom-sheet">

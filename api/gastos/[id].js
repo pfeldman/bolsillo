@@ -9,7 +9,14 @@ export default async function handler(req, res) {
 
   if (req.method === 'DELETE') {
     try {
-      const gasto = await Gasto.findOne({ _id: req.query.id, user_id: user.id });
+      // First try finding by user_id (own expense)
+      let gasto = await Gasto.findOne({ _id: req.query.id, user_id: user.id });
+
+      // If not found, check if this expense was created by the user (owner_id) in a shared context
+      if (!gasto) {
+        gasto = await Gasto.findOne({ _id: req.query.id, owner_id: user.id });
+      }
+
       if (!gasto) return res.status(404).json({ error: 'Gasto no encontrado' });
       await Gasto.findByIdAndDelete(req.query.id);
       return res.json({ message: 'Gasto eliminado' });

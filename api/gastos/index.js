@@ -42,7 +42,49 @@ export default async function handler(req, res) {
         const endDate = new Date(año, mes, 0, 23, 59, 59);
         query.fecha = { $gte: startDate, $lte: endDate };
       }
-      const gastos = await Gasto.find(query).sort({ createdAt: -1 });
+      let gastos = await Gasto.find(query).sort({ createdAt: -1 });
+
+      // Also include expenses from shared categories where this user is a member
+      // Find categories shared with this user
+      const sharedConfigs = await Config.find({
+        'categories.shared_with.user_id': user.id,
+        user_id: { $ne: user.id },
+      });
+
+      const sharedCategoryQueries = [];
+      for (const otherConfig of sharedConfigs) {
+        for (const cat of otherConfig.categories) {
+          if (cat.shared_with && cat.shared_with.some(s => s.user_id === user.id)) {
+            // Get all member IDs for this shared category
+            const memberIds = [otherConfig.user_id, ...cat.shared_with.map(s => s.user_id)];
+            const sharedQuery = {
+              user_id: { $in: memberIds },
+              categoria: cat.name,
+            };
+            // Apply same date filters
+            if (query.fecha) sharedQuery.fecha = query.fecha;
+            // If filtering by category, only include if it matches
+            if (categoria && cat.name !== categoria) continue;
+            sharedCategoryQueries.push(sharedQuery);
+          }
+        }
+      }
+
+      if (sharedCategoryQueries.length > 0) {
+        for (const sq of sharedCategoryQueries) {
+          const sharedGastos = await Gasto.find(sq).sort({ createdAt: -1 });
+          // Add shared gastos, avoiding duplicates (own expenses already included)
+          const existingIds = new Set(gastos.map(g => g._id.toString()));
+          for (const sg of sharedGastos) {
+            if (!existingIds.has(sg._id.toString())) {
+              gastos.push(sg);
+            }
+          }
+        }
+        // Re-sort combined results
+        gastos.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      }
+
       return res.json(gastos);
     } catch (error) {
       return res.status(500).json({ error: error.message });
@@ -53,6 +95,7 @@ export default async function handler(req, res) {
     try {
       const { prorate, ...gastoData } = req.body;
       gastoData.user_id = user.id;
+      gastoData.owner_id = user.id;
 
       if (prorate) {
         const config = await Config.findOne({ user_id: user.id }) || { weekStartDay: 1, billingCycleStartDay: 1 };

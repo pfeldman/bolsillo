@@ -38,7 +38,39 @@ export default async function handler(req, res) {
       } else if (migrateConfig(config)) {
         await config.save();
       }
-      return res.json(config);
+
+      // Build response with own categories marked
+      const configObj = config.toObject();
+      configObj.categories = configObj.categories.map(cat => ({
+        ...cat,
+        isShared: cat.shared_with && cat.shared_with.length > 0,
+        isOwner: true,
+        owner_id: user.id,
+      }));
+
+      // Find categories shared WITH this user from other users' configs
+      const sharedConfigs = await Config.find({
+        'categories.shared_with.user_id': user.id,
+        user_id: { $ne: user.id },
+      });
+
+      const sharedCategories = [];
+      for (const otherConfig of sharedConfigs) {
+        for (const cat of otherConfig.categories) {
+          if (cat.shared_with && cat.shared_with.some(s => s.user_id === user.id)) {
+            sharedCategories.push({
+              ...cat.toObject(),
+              isShared: true,
+              isOwner: false,
+              owner_id: otherConfig.user_id,
+            });
+          }
+        }
+      }
+
+      configObj.sharedCategories = sharedCategories;
+
+      return res.json(configObj);
     } catch (error) {
       return res.status(500).json({ error: error.message });
     }

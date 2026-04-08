@@ -95,14 +95,53 @@ export default async function handler(req, res) {
     const config = await Config.findOne({ user_id: user.id }) || { categories: DEFAULT_CATEGORIES, weekStartDay: 1, billingCycleStartDay: 1 };
     const categories = getCategories(config);
     const { periodStart, periodEnd } = getBillingPeriod(config.billingCycleStartDay || 1, now);
-    const gastosDelPeriodo = await Gasto.find({ user_id: user.id, fecha: { $gte: periodStart.toDate(), $lte: periodEnd.toDate() } });
+
+    // Fetch own expenses
+    const ownGastos = await Gasto.find({ user_id: user.id, fecha: { $gte: periodStart.toDate(), $lte: periodEnd.toDate() } });
+
+    // For shared categories (owned by this user), also fetch expenses from shared members
+    const sharedMemberIds = new Set();
+    categories.forEach(cat => {
+      if (cat.shared_with && cat.shared_with.length > 0) {
+        cat.shared_with.forEach(s => sharedMemberIds.add(s.user_id));
+      }
+    });
+
+    let sharedMemberGastos = [];
+    if (sharedMemberIds.size > 0) {
+      sharedMemberGastos = await Gasto.find({
+        user_id: { $in: Array.from(sharedMemberIds) },
+        fecha: { $gte: periodStart.toDate(), $lte: periodEnd.toDate() },
+      });
+    }
+
+    const allGastos = [...ownGastos, ...sharedMemberGastos];
 
     const weekStartDay = config.weekStartDay !== undefined ? config.weekStartDay : 1;
     const { daysFromStart, targetDate } = getDaysFromStartOfPeriodToToday(periodStart, periodEnd, now);
 
     const categoriesResult = categories.map(cat => {
+      const isShared = cat.shared_with && cat.shared_with.length > 0;
+
+      // For shared categories, count expenses from all members; for private, only own
+      let relevantGastos;
+      if (isShared) {
+        const memberIds = [user.id, ...cat.shared_with.map(s => s.user_id)];
+        relevantGastos = allGastos.filter(g => memberIds.includes(g.user_id) && g.categoria === cat.name);
+      } else {
+        relevantGastos = ownGastos.filter(g => g.categoria === cat.name);
+      }
+
+      // Build a filtered list for the weekly breakdown (needs all expenses in the period for that category)
+      const gastosForBreakdown = isShared
+        ? allGastos.filter(g => {
+            const memberIds = [user.id, ...cat.shared_with.map(s => s.user_id)];
+            return memberIds.includes(g.user_id);
+          })
+        : ownGastos;
+
       const dailyLimit = calculateDailyLimit(cat.limit, periodStart, periodEnd);
-      const weeklyBreakdown = calculateWeeklyBreakdownForCategory(periodStart, periodEnd, weekStartDay, dailyLimit, cat.name, gastosDelPeriodo);
+      const weeklyBreakdown = calculateWeeklyBreakdownForCategory(periodStart, periodEnd, weekStartDay, dailyLimit, cat.name, gastosForBreakdown);
 
       let totalGastado = 0, currentLimit = 0;
       weeklyBreakdown.forEach(week => {
@@ -124,8 +163,64 @@ export default async function handler(req, res) {
         disponible: Math.round(Math.max(0, currentLimit - totalGastado)),
         disponibleMes: cat.limit - totalGastado,
         weeklyBreakdown,
+        isShared: isShared,
+        isOwner: true,
+        shared_with: cat.shared_with || [],
       };
     });
+
+    // Also include categories shared WITH this user from other users
+    const sharedConfigs = await Config.find({
+      'categories.shared_with.user_id': user.id,
+      user_id: { $ne: user.id },
+    });
+
+    for (const otherConfig of sharedConfigs) {
+      const otherPeriod = getBillingPeriod(otherConfig.billingCycleStartDay || 1, now);
+      const otherWeekStartDay = otherConfig.weekStartDay !== undefined ? otherConfig.weekStartDay : 1;
+
+      for (const cat of otherConfig.categories) {
+        if (!cat.shared_with || !cat.shared_with.some(s => s.user_id === user.id)) continue;
+
+        // Gather all member IDs (owner + all shared)
+        const memberIds = [otherConfig.user_id, ...cat.shared_with.map(s => s.user_id)];
+
+        // Fetch all members' expenses in the owner's billing period
+        const allSharedGastos = await Gasto.find({
+          user_id: { $in: memberIds },
+          fecha: { $gte: otherPeriod.periodStart.toDate(), $lte: otherPeriod.periodEnd.toDate() },
+        });
+
+        const dailyLimit = calculateDailyLimit(cat.limit, otherPeriod.periodStart, otherPeriod.periodEnd);
+        const weeklyBreakdown = calculateWeeklyBreakdownForCategory(otherPeriod.periodStart, otherPeriod.periodEnd, otherWeekStartDay, dailyLimit, cat.name, allSharedGastos);
+
+        let totalGastado = 0, currentLimit = 0;
+        weeklyBreakdown.forEach(week => {
+          if (week.isPast || week.isCurrent) {
+            totalGastado += week.gastado;
+            currentLimit += week.limite;
+          }
+        });
+
+        categoriesResult.push({
+          id: cat.id,
+          name: cat.name,
+          icon: cat.icon || '💰',
+          color: cat.color || '#059669',
+          limiteMensual: cat.limit,
+          limiteDiario: Math.round(dailyLimit),
+          limiteAcumuladoHastaHoy: Math.round(currentLimit),
+          totalGastado,
+          disponible: Math.round(Math.max(0, currentLimit - totalGastado)),
+          disponibleMes: cat.limit - totalGastado,
+          weeklyBreakdown,
+          isShared: true,
+          isOwner: false,
+          owner_id: otherConfig.user_id,
+          shared_with: cat.shared_with || [],
+        });
+      }
+    }
 
     return res.json({
       billingPeriod: { start: periodStart.format('YYYY-MM-DD'), end: periodEnd.format('YYYY-MM-DD'), startDay: config.billingCycleStartDay || 1 },

@@ -4,6 +4,7 @@
   "framework": null,
   "outputDirectory": "public",
   "rewrites": [
+    { "source": "/api/categories/share", "destination": "/api/categories/share" },
     { "source": "/api/gastos/export/csv", "destination": "/api/gastos/export/csv" },
     { "source": "/api/gastos/:id", "destination": "/api/gastos/[id]" },
     { "source": "/api/gastos", "destination": "/api/gastos/index" },

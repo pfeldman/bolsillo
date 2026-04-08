@@ -15,11 +15,17 @@ export async function connectDB() {
 // Models
 const gastoSchema = new mongoose.Schema({
   user_id: { type: String },
+  owner_id: { type: String }, // who actually added the expense (for shared categories)
   descripcion: { type: String, required: true },
   monto: { type: Number, required: true },
   categoria: { type: String, required: true },
   fecha: { type: Date, default: Date.now },
 }, { timestamps: true });
+
+const sharedWithSchema = new mongoose.Schema({
+  user_id: { type: String, required: true },
+  email: { type: String, required: true },
+}, { _id: false });
 
 const categorySchema = new mongoose.Schema({
   id: { type: String, required: true },
@@ -27,6 +33,7 @@ const categorySchema = new mongoose.Schema({
   limit: { type: Number, required: true },
   icon: { type: String, default: '💰' },
   color: { type: String, default: '#059669' },
+  shared_with: { type: [sharedWithSchema], default: [] },
 }, { _id: false });
 
 const configSchema = new mongoose.Schema({
