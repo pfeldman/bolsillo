@@ -1,5 +1,5 @@
 const API_URL = '/api';
-const supabase = window.__supabase;
+let supabase = null;
 
 let currentLimits = null;
 
@@ -17,13 +17,15 @@ async function authFetch(url, options = {}) {
     return fetch(url, { ...options, headers });
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+// Called by index.html after auth check passes
+function bootApp(supabaseClient) {
+    supabase = supabaseClient;
     initializeApp();
     setupEventListeners();
     loadDashboard();
     loadConfig();
     registerServiceWorker();
-});
+}
 
 // Register Service Worker for PWA
 function registerServiceWorker() {

@@ -357,13 +357,10 @@
                 return;
             }
 
-            // Expose supabase client for app.js
-            window.__supabase = sb;
-            window.__supabaseSession = session;
-
-            // Load app.js dynamically after auth check passes
+            // Load app.js and boot it with supabase client
             const script = document.createElement('script');
             script.src = 'app.js';
+            script.onload = () => bootApp(sb);
             document.body.appendChild(script);
         })();
     </script>
