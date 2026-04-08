@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Bolsillo - Autenticando...</title>
+    <meta name="theme-color" content="#1a1814">
+    <style>
+        :root {
+            --primary: #059669;
+            --bg: #f5f5f5;
+            --text-secondary: #6b7280;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, 'SF Pro Display', 'SF Pro Text', BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            min-height: 100vh;
+            min-height: 100dvh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 16px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #d1fae5;
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        .text {
+            font-size: 15px;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="spinner"></div>
+    <div class="text">Autenticando...</div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        const SUPABASE_URL = 'https://fqelzbjdseukdujnxeqg.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZxZWx6Ympkc2V1a2R1am54ZXFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0NzgxMjgsImV4cCI6MjA4ODA1NDEyOH0.ZMa1JDS8OM3VUhEedRIMsoU2iHbbWuzF_yNVQjjON5Q';
+
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        // Supabase JS v2 automatically extracts the session from the URL hash/query params
+        // when createClient is called. We just need to wait for the session to be established.
+        (async () => {
+            try {
+                // onAuthStateChange fires when supabase picks up tokens from the URL
+                const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+                    if (event === 'SIGNED_IN' && session) {
+                        subscription.unsubscribe();
+                        window.location.href = '/index.html';
+                    }
+                });
+
+                // Fallback: if session is already present (e.g. from the hash)
+                const { data: { session } } = await supabase.auth.getSession();
+                if (session) {
+                    subscription.unsubscribe();
+                    window.location.href = '/index.html';
+                    return;
+                }
+
+                // Timeout fallback: redirect to login after 10 seconds if nothing happens
+                setTimeout(() => {
+                    subscription.unsubscribe();
+                    window.location.href = '/login.html';
+                }, 10000);
+            } catch (err) {
+                console.error('Auth callback error:', err);
+                window.location.href = '/login.html';
+            }
+        })();
+    </script>
+</body>
+</html>

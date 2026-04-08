@@ -14,6 +14,7 @@ export async function connectDB() {
 
 // Models
 const gastoSchema = new mongoose.Schema({
+  user_id: { type: String },
   descripcion: { type: String, required: true },
   monto: { type: Number, required: true },
   categoria: { type: String, enum: ['Obligatorios', 'Entretenimiento'], required: true },
@@ -21,6 +22,7 @@ const gastoSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 const configSchema = new mongoose.Schema({
+  user_id: { type: String },
   limiteObligatorios: { type: Number, default: 750000 },
   limiteEntretenimiento: { type: Number, default: 750000 },
   weekStartDay: { type: Number, default: 1, min: 0, max: 6 },

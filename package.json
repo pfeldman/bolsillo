@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
+    "@supabase/supabase-js": "^2.49.0",
     "mongoose": "^7.5.0",
     "moment": "^2.29.4",
     "json2csv": "^5.0.7"

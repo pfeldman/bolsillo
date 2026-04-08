@@ -1,4 +1,5 @@
 import { connectDB, Gasto, Config } from '../_db.js';
+import { verifyAuth } from '../_auth.js';
 import moment from 'moment';
 
 function getBillingPeriod(billingCycleStartDay, referenceDate = moment()) {
@@ -73,13 +74,16 @@ function calculateWeeklyBreakdown(periodStart, periodEnd, weekStartDay, dailyLim
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
+  const user = await verifyAuth(req);
+  if (!user) return res.status(401).json({ error: 'No autorizado' });
+
   await connectDB();
 
   try {
     const now = moment();
-    const config = await Config.findOne() || { limiteObligatorios: 750000, limiteEntretenimiento: 750000, weekStartDay: 1, billingCycleStartDay: 1 };
+    const config = await Config.findOne({ user_id: user.id }) || { limiteObligatorios: 750000, limiteEntretenimiento: 750000, weekStartDay: 1, billingCycleStartDay: 1 };
     const { periodStart, periodEnd } = getBillingPeriod(config.billingCycleStartDay || 1, now);
-    const gastosDelPeriodo = await Gasto.find({ fecha: { $gte: periodStart.toDate(), $lte: periodEnd.toDate() } });
+    const gastosDelPeriodo = await Gasto.find({ user_id: user.id, fecha: { $gte: periodStart.toDate(), $lte: periodEnd.toDate() } });
 
     const dailyLimitO = calculateDailyLimit(config.limiteObligatorios, periodStart, periodEnd);
     const dailyLimitE = calculateDailyLimit(config.limiteEntretenimiento, periodStart, periodEnd);

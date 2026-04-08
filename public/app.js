@@ -1,6 +1,21 @@
 const API_URL = '/api';
+const supabase = window.__supabase;
 
 let currentLimits = null;
+
+// Authenticated fetch helper - adds Authorization header to all API calls
+async function authFetch(url, options = {}) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+        window.location.href = '/login.html';
+        return;
+    }
+    const headers = {
+        ...options.headers,
+        'Authorization': `Bearer ${session.access_token}`
+    };
+    return fetch(url, { ...options, headers });
+}
 
 document.addEventListener('DOMContentLoaded', () => {
     initializeApp();
@@ -146,7 +161,8 @@ async function loadDashboard() {
     loadingOverlay.classList.add('active');
     
     try {
-        const response = await fetch(`${API_URL}/limits/current`);
+        const response = await authFetch(`${API_URL}/limits/current`);
+        if (!response) return;
         const data = await response.json();
         currentLimits = data;
         
@@ -348,13 +364,14 @@ async function handleQuickExpense(e) {
         : '<span class="button-spinner"></span> Agregando...';
     
     try {
-        const response = await fetch(`${API_URL}/gastos`, {
+        const response = await authFetch(`${API_URL}/gastos`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify(gasto)
         });
+        if (!response) return;
         
         if (response.ok) {
             const result = await response.json();
@@ -401,7 +418,8 @@ async function loadExpenses() {
     if (año) url += `año=${año}`;
     
     try {
-        const response = await fetch(url);
+        const response = await authFetch(url);
+        if (!response) return;
         const gastos = await response.json();
         
         const container = document.getElementById('expenses-list-mobile');
@@ -451,9 +469,10 @@ async function deleteExpense(id) {
     if (!confirm('¿Eliminar este gasto?')) return;
     
     try {
-        const response = await fetch(`${API_URL}/gastos/${id}`, {
+        const response = await authFetch(`${API_URL}/gastos/${id}`, {
             method: 'DELETE'
         });
+        if (!response) return;
         
         if (response.ok) {
             loadExpenses();
@@ -470,7 +489,8 @@ async function deleteExpense(id) {
 
 async function loadConfig() {
     try {
-        const response = await fetch(`${API_URL}/config`);
+        const response = await authFetch(`${API_URL}/config`);
+        if (!response) return;
         const config = await response.json();
         
         const obligatoriosInput = document.getElementById('limite-obligatorios');
@@ -536,13 +556,14 @@ async function handleConfigSave() {
     }
     
     try {
-        const response = await fetch(`${API_URL}/config`, {
+        const response = await authFetch(`${API_URL}/config`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify(config)
         });
+        if (!response) return;
         
         if (response.ok) {
             showNotification('✅ Configuración guardada', 'success');
@@ -559,10 +580,23 @@ async function handleConfigSave() {
 async function exportToCSV() {
     // Export current billing period instead of calendar month
     const url = `${API_URL}/gastos/export/csv?currentPeriod=true`;
-    
+
     try {
-        window.open(url, '_blank');
-        showNotification('✅ Descargando CSV...', 'success');
+        const response = await authFetch(url);
+        if (!response) return;
+        if (!response.ok) throw new Error('Error al exportar');
+        const blob = await response.blob();
+        const disposition = response.headers.get('Content-Disposition') || '';
+        const filenameMatch = disposition.match(/filename="?(.+?)"?$/);
+        const filename = filenameMatch ? filenameMatch[1] : 'gastos.csv';
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(a.href);
+        showNotification('Descargando CSV...', 'success');
     } catch (error) {
         console.error('Error exporting CSV:', error);
         showNotification('Error al exportar CSV', 'error');
@@ -658,6 +692,13 @@ function setupMoneyInputFormatting(inputId) {
 
     // Store cleave instance for later use
     input.cleaveInstance = cleave;
+}
+
+// Logout
+async function handleLogout() {
+    if (!confirm('Cerrar sesion?')) return;
+    await supabase.auth.signOut();
+    window.location.href = '/login.html';
 }
 
 // Bottom Sheet

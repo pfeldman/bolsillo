@@ -1,4 +1,5 @@
 import { connectDB, Gasto, Config } from '../_db.js';
+import { verifyAuth } from '../_auth.js';
 import moment from 'moment';
 
 function getBillingPeriod(billingCycleStartDay, referenceDate = moment()) {
@@ -22,15 +23,18 @@ function getBillingPeriod(billingCycleStartDay, referenceDate = moment()) {
 }
 
 export default async function handler(req, res) {
+  const user = await verifyAuth(req);
+  if (!user) return res.status(401).json({ error: 'No autorizado' });
+
   await connectDB();
 
   if (req.method === 'GET') {
     try {
       const { categoria, mes, año, currentPeriod } = req.query;
-      let query = {};
+      let query = { user_id: user.id };
       if (categoria) query.categoria = categoria;
       if (currentPeriod === 'true') {
-        const config = await Config.findOne() || { billingCycleStartDay: 1 };
+        const config = await Config.findOne({ user_id: user.id }) || { billingCycleStartDay: 1 };
         const { periodStart, periodEnd } = getBillingPeriod(config.billingCycleStartDay || 1);
         query.fecha = { $gte: periodStart.toDate(), $lte: periodEnd.toDate() };
       } else if (mes && año) {
@@ -48,8 +52,10 @@ export default async function handler(req, res) {
   if (req.method === 'POST') {
     try {
       const { prorate, ...gastoData } = req.body;
+      gastoData.user_id = user.id;
+
       if (prorate) {
-        const config = await Config.findOne() || { weekStartDay: 1, billingCycleStartDay: 1 };
+        const config = await Config.findOne({ user_id: user.id }) || { weekStartDay: 1, billingCycleStartDay: 1 };
         const weekStartDay = config.weekStartDay !== undefined ? config.weekStartDay : 1;
         const now = moment();
         const { periodStart, periodEnd } = getBillingPeriod(config.billingCycleStartDay || 1, now);
