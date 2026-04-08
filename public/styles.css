@@ -384,15 +384,7 @@ main {
     justify-content: center;
 }
 
-.card-icon.obligatorios-icon {
-    background: #dbeafe;
-    color: #3b82f6;
-}
-
-.card-icon.entretenimiento-icon {
-    background: #fef3c7;
-    color: #f59e0b;
-}
+/* Dynamic card icon colors set via inline styles in app.js */
 
 .card-amounts {
     margin-bottom: 10px;
@@ -430,9 +422,8 @@ main {
     width: 0%;
 }
 
-#progress-obligatorios.over-limit,
-#progress-entretenimiento.over-limit {
-    background: linear-gradient(90deg, var(--red), #f87171);
+.progress-bar.over-limit {
+    background: linear-gradient(90deg, var(--red), #f87171) !important;
 }
 
 /* ============== WEEKLY BREAKDOWN ============== */
@@ -638,85 +629,51 @@ main {
 
 /* ============== FORM STYLES ============== */
 
-.category-switch-container {
+/* ============== CATEGORY PILLS (expense form) ============== */
+
+.category-pills-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
     margin: 0 0 14px;
 }
 
-.category-switch {
-    display: block;
-    position: relative;
-    cursor: pointer;
-    margin: 0;
-}
-
-.category-switch input {
-    opacity: 0;
-    width: 0;
-    height: 0;
-    position: absolute;
-    pointer-events: none;
-}
-
-.slider {
+.category-pill {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    background: #e5e7eb;
-    border-radius: 12px;
-    padding: 3px;
-    position: relative;
-    height: 46px;
-    transition: 0.3s;
-}
-
-.slider::before {
-    content: "";
-    position: absolute;
-    height: 40px;
-    width: calc(50% - 3px);
-    left: 3px;
-    background: white;
-    border-radius: 10px;
-    transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-    z-index: 1;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
-}
-
-input:checked + .slider::before {
-    transform: translateX(calc(100% + 3px));
-}
-
-.option-left, .option-right {
-    flex: 1;
-    text-align: center;
-    padding: 8px;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-tertiary);
-    position: relative;
-    z-index: 2;
-    transition: color 0.25s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
     gap: 5px;
+    padding: 10px 16px;
+    border-radius: 12px;
+    border: 2px solid #e5e7eb;
+    background: white;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    flex: 1;
+    min-width: 0;
+    justify-content: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-.option-left {
-    color: var(--text);
+.category-pill:active {
+    transform: scale(0.97);
 }
 
-input:checked + .slider .option-left {
-    color: var(--text-tertiary);
+.category-pill.active {
+    border-color: var(--pill-color, var(--primary));
+    background: var(--pill-color, var(--primary));
+    color: white;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
-input:checked + .slider .option-right {
-    color: var(--text);
-}
-
-.option-left svg, .option-right svg {
-    width: 14px;
-    height: 14px;
+.pill-icon {
+    font-size: 16px;
+    line-height: 1;
+    flex-shrink: 0;
 }
 
 .input-group {
@@ -1091,6 +1048,129 @@ input:checked + .slider .option-right {
 
 .save-config-btn:active {
     opacity: 0.8;
+}
+
+/* ============== CATEGORY CONFIG CARDS ============== */
+
+.category-config-card {
+    margin-bottom: 10px;
+}
+
+.category-config-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px 6px;
+}
+
+.category-config-icon-color {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.category-icon-input {
+    width: 44px;
+    height: 38px;
+    text-align: center;
+    font-size: 22px;
+    border: 1.5px solid var(--separator);
+    border-radius: 10px;
+    background: var(--bg);
+    padding: 0;
+    line-height: 38px;
+}
+
+.category-icon-input:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.25);
+}
+
+.category-color-input {
+    width: 38px;
+    height: 38px;
+    border: none;
+    border-radius: 10px;
+    padding: 2px;
+    cursor: pointer;
+    background: var(--bg);
+}
+
+.category-color-input::-webkit-color-swatch-wrapper {
+    padding: 2px;
+}
+
+.category-color-input::-webkit-color-swatch {
+    border: none;
+    border-radius: 8px;
+}
+
+.category-color-input::-moz-color-swatch {
+    border: none;
+    border-radius: 8px;
+}
+
+.category-delete-btn {
+    background: none;
+    border: none;
+    color: var(--red);
+    padding: 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+}
+
+.category-delete-btn:active {
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.config-text-input {
+    font-size: 16px;
+    font-weight: 500;
+    padding: 6px 10px;
+    border: none;
+    border-radius: 8px;
+    text-align: right;
+    width: 160px;
+    background: var(--bg);
+    color: var(--text);
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+.config-text-input:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.25);
+}
+
+.add-category-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 14px;
+    border: 2px dashed #d1d5db;
+    border-radius: 14px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 4px;
+}
+
+.add-category-btn:active {
+    background: rgba(0, 0, 0, 0.03);
+    border-color: var(--text-tertiary);
+}
+
+.add-category-btn svg {
+    color: var(--primary);
 }
 
 /* ============== NOTIFICATIONS ============== */

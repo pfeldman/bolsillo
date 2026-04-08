@@ -2,6 +2,8 @@ const API_URL = '/api';
 let supabase = null;
 
 let currentLimits = null;
+let appCategories = []; // loaded from config
+let selectedCategory = null; // selected category name for new expense form
 
 // Authenticated fetch helper - adds Authorization header to all API calls
 async function authFetch(url, options = {}) {
@@ -118,6 +120,7 @@ function setupEventListeners() {
     document.getElementById('quick-expense-form').addEventListener('submit', handleQuickExpense);
     document.getElementById('save-config').addEventListener('click', handleConfigSave);
     document.getElementById('export-csv').addEventListener('click', exportToCSV);
+    document.getElementById('add-category-btn').addEventListener('click', addCategoryRow);
 
     document.getElementById('filter-categoria').addEventListener('change', loadExpenses);
     document.getElementById('filter-mes').addEventListener('change', loadExpenses);
@@ -125,14 +128,7 @@ function setupEventListeners() {
 
     // Setup money input formatting
     setupMoneyInputFormatting('quick-monto');
-    setupMoneyInputFormatting('limite-obligatorios');
-    setupMoneyInputFormatting('limite-entretenimiento');
     setupMoneyInputFormatting('currency-multiplier');
-
-    // Easter egg - recargar página al tocar "Obligatorios"
-    document.getElementById('obligatorios-title').addEventListener('click', () => {
-        window.location.reload();
-    });
 
     setupBottomSheet();
 }
@@ -142,12 +138,12 @@ function switchPage(page) {
         btn.classList.remove('active');
     });
     document.querySelector(`[data-page="${page}"]`).classList.add('active');
-    
+
     document.querySelectorAll('.page').forEach(p => {
         p.classList.remove('active');
     });
     document.getElementById(page).classList.add('active');
-    
+
     if (page === 'dashboard') {
         loadDashboard();
     } else if (page === 'gastos') {
@@ -161,13 +157,13 @@ function switchPage(page) {
 async function loadDashboard() {
     const loadingOverlay = document.getElementById('dashboard-loading');
     loadingOverlay.classList.add('active');
-    
+
     try {
         const response = await authFetch(`${API_URL}/limits/current`);
         if (!response) return;
         const data = await response.json();
         currentLimits = data;
-        
+
         updateCategoryDisplay(data);
     } catch (error) {
         console.error('Error loading dashboard:', error);
@@ -202,80 +198,70 @@ function updateCategoryDisplay(data) {
         }
     }
 
-    // Obligatorios
-    document.getElementById('obligatorios-available').textContent = formatNumber(data.obligatorios.disponible);
-    document.getElementById('obligatorios-limit').textContent = formatNumber(data.obligatorios.limiteAcumuladoHastaHoy);
-    document.getElementById('obligatorios-spent').textContent = formatNumber(data.obligatorios.totalGastado);
-    
-    const obligatoriosProgress = document.getElementById('progress-obligatorios');
-    const obligatoriosPercentage = (data.obligatorios.totalGastado / data.obligatorios.limiteAcumuladoHastaHoy) * 100;
-    obligatoriosProgress.style.width = `${Math.min(obligatoriosPercentage, 100)}%`;
-    
-    if (obligatoriosPercentage > 100) {
-        obligatoriosProgress.classList.add('over-limit');
-        document.getElementById('obligatorios-available').parentElement.style.color = '#ef4444';
-    } else {
-        obligatoriosProgress.classList.remove('over-limit');
-        document.getElementById('obligatorios-available').parentElement.style.color = '#059669';
+    // Store categories for other uses (expense form, filters)
+    if (data.categories && data.categories.length > 0) {
+        appCategories = data.categories.map(c => ({ id: c.id, name: c.name, icon: c.icon, color: c.color }));
+        updateCategoryPills();
+        updateCategoryFilterOptions();
     }
-    
-    // Entretenimiento
-    document.getElementById('entretenimiento-available').textContent = formatNumber(data.entretenimiento.disponible);
-    document.getElementById('entretenimiento-limit').textContent = formatNumber(data.entretenimiento.limiteAcumuladoHastaHoy);
-    document.getElementById('entretenimiento-spent').textContent = formatNumber(data.entretenimiento.totalGastado);
-    
-    const entretenimientoProgress = document.getElementById('progress-entretenimiento');
-    const entretenimientoPercentage = (data.entretenimiento.totalGastado / data.entretenimiento.limiteAcumuladoHastaHoy) * 100;
-    entretenimientoProgress.style.width = `${Math.min(entretenimientoPercentage, 100)}%`;
-    
-    if (entretenimientoPercentage > 100) {
-        entretenimientoProgress.classList.add('over-limit');
-        document.getElementById('entretenimiento-available').parentElement.style.color = '#ef4444';
-    } else {
-        entretenimientoProgress.classList.remove('over-limit');
-        document.getElementById('entretenimiento-available').parentElement.style.color = '#059669';
-    }
-    
-    // Update weekly breakdowns
-    if (data.weeklyBreakdown) {
-        updateWeeklyBreakdown('obligatorios', data.weeklyBreakdown);
-        updateWeeklyBreakdown('entretenimiento', data.weeklyBreakdown);
-    }
+
+    // Render category cards dynamically
+    const container = document.getElementById('category-cards-container');
+    container.innerHTML = '';
+
+    data.categories.forEach((cat, index) => {
+        const card = document.createElement('div');
+        card.className = 'category-card';
+
+        const percentage = cat.limiteAcumuladoHastaHoy > 0 ? (cat.totalGastado / cat.limiteAcumuladoHastaHoy) * 100 : 0;
+        const isOverLimit = percentage > 100;
+        const amountColor = isOverLimit ? '#ef4444' : (cat.color || '#059669');
+        const progressClass = isOverLimit ? 'over-limit' : '';
+
+        // Build weekly breakdown HTML
+        let weeklyHtml = '';
+        if (cat.weeklyBreakdown && cat.weeklyBreakdown.length > 0) {
+            weeklyHtml = buildWeeklyBreakdownHtml(cat.id, cat.weeklyBreakdown, cat.color);
+        }
+
+        card.innerHTML = `
+            <div class="card-top">
+                <div class="card-label">${index === 0 ? `<span class="clickable-title" onclick="window.location.reload()">${cat.name.toUpperCase()}</span>` : cat.name.toUpperCase()}</div>
+                <div class="card-icon" style="background: ${hexToRgba(cat.color || '#059669', 0.15)}; color: ${cat.color || '#059669'};">
+                    <span style="font-size: 18px; line-height: 1;">${cat.icon || '💰'}</span>
+                </div>
+            </div>
+            <div class="card-amounts">
+                <div class="amount-large" style="color: ${amountColor};">$${formatNumber(cat.disponible)}</div>
+                <div class="amount-detail">de $${formatNumber(cat.limiteAcumuladoHastaHoy)} · Gastado $${formatNumber(cat.totalGastado)}</div>
+            </div>
+            <div class="progress-container">
+                <div class="progress-bar ${progressClass}" style="width: ${Math.min(percentage, 100)}%; background: linear-gradient(90deg, ${cat.color || '#059669'}, ${lightenColor(cat.color || '#059669', 30)});"></div>
+            </div>
+            ${weeklyHtml ? `<div class="weekly-breakdown">${weeklyHtml}</div>` : ''}
+        `;
+
+        container.appendChild(card);
+    });
 }
 
-function toggleWeeklyBreakdown(category) {
-    const content = document.getElementById(`${category}-weekly-content`);
-    const icon = document.getElementById(`${category}-toggle-icon`);
-    
-    if (content.classList.contains('collapsed')) {
-        content.classList.remove('collapsed');
-        icon.textContent = '▼';
-    } else {
-        content.classList.add('collapsed');
-        icon.textContent = '▶';
-    }
-}
-
-function updateWeeklyBreakdown(category, weeks) {
-    const container = document.getElementById(`${category}-weekly`);
-    if (!container) return;
-    
+function buildWeeklyBreakdownHtml(categoryId, weeks, color) {
     let html = `
-        <div class="weekly-header-toggle" onclick="toggleWeeklyBreakdown('${category}')">
+        <div class="weekly-header-toggle" onclick="toggleWeeklyBreakdown('${categoryId}')">
             <span class="weekly-title">Desglose semanal</span>
-            <span class="weekly-toggle-icon" id="${category}-toggle-icon">▶</span>
+            <span class="weekly-toggle-icon" id="${categoryId}-toggle-icon">▶</span>
         </div>
-        <div class="weekly-content collapsed" id="${category}-weekly-content">
+        <div class="weekly-content collapsed" id="${categoryId}-weekly-content">
     `;
-    
+
     weeks.forEach(week => {
-        const limit = category === 'obligatorios' ? week.limiteObligatorios : week.limiteEntretenimiento;
-        const spent = category === 'obligatorios' ? week.gastadoObligatorios : week.gastadoEntretenimiento;
-        const available = category === 'obligatorios' ? week.disponibleObligatorios : week.disponibleEntretenimiento;
-        
+        const limit = week.limite;
+        const spent = week.gastado;
+        const available = week.disponible;
+
         let statusClass = '';
         let statusText = '';
-        
+
         if (week.isPast) {
             statusClass = 'week-past';
             const leftover = available;
@@ -297,10 +283,10 @@ function updateWeeklyBreakdown(category, weeks) {
                 statusText = `<span class="week-limit">Límite: $${formatNumber(limit)}</span>`;
             }
         }
-        
+
         const percentage = (spent / limit * 100);
         const shouldShowProgress = week.isPast || week.isCurrent || spent > 0;
-        
+
         html += `
             <div class="week-item ${statusClass}">
                 <div class="week-header">
@@ -313,7 +299,7 @@ function updateWeeklyBreakdown(category, weeks) {
                             <span>${week.isPast || week.isCurrent ? 'Gastado' : 'Programado'}: $${formatNumber(spent)} / $${formatNumber(limit)}</span>
                         </div>
                         <div class="week-progress">
-                            <div class="week-progress-bar ${percentage > 100 ? 'over-limit' : ''} ${!week.isPast && !week.isCurrent ? 'future-expense' : ''}" 
+                            <div class="week-progress-bar ${percentage > 100 ? 'over-limit' : ''} ${!week.isPast && !week.isCurrent ? 'future-expense' : ''}"
                                  style="width: ${Math.min(percentage, 100)}%"></div>
                         </div>
                     </div>
@@ -321,21 +307,89 @@ function updateWeeklyBreakdown(category, weeks) {
             </div>
         `;
     });
-    
-    html += '</div>'; // Close weekly-content div
-    container.innerHTML = html;
+
+    html += '</div>';
+    return html;
 }
+
+function toggleWeeklyBreakdown(categoryId) {
+    const content = document.getElementById(`${categoryId}-weekly-content`);
+    const icon = document.getElementById(`${categoryId}-toggle-icon`);
+    if (!content || !icon) return;
+
+    if (content.classList.contains('collapsed')) {
+        content.classList.remove('collapsed');
+        icon.textContent = '▼';
+    } else {
+        content.classList.add('collapsed');
+        icon.textContent = '▶';
+    }
+}
+
+// ===== Category pills for expense form =====
+
+function updateCategoryPills() {
+    const container = document.getElementById('category-pills-container');
+    if (!container) return;
+
+    container.innerHTML = '';
+    appCategories.forEach((cat, index) => {
+        const pill = document.createElement('button');
+        pill.type = 'button';
+        pill.className = 'category-pill' + (index === 0 ? ' active' : '');
+        pill.dataset.category = cat.name;
+        pill.style.setProperty('--pill-color', cat.color || '#059669');
+        pill.innerHTML = `<span class="pill-icon">${cat.icon || '💰'}</span> ${cat.name}`;
+        pill.addEventListener('click', () => selectCategoryPill(cat.name));
+        container.appendChild(pill);
+    });
+
+    // Default to first category
+    selectedCategory = appCategories.length > 0 ? appCategories[0].name : null;
+}
+
+function selectCategoryPill(categoryName) {
+    selectedCategory = categoryName;
+    document.querySelectorAll('.category-pill').forEach(pill => {
+        pill.classList.toggle('active', pill.dataset.category === categoryName);
+    });
+}
+
+// ===== Category filter options for history =====
+
+function updateCategoryFilterOptions() {
+    const select = document.getElementById('filter-categoria');
+    if (!select) return;
+
+    // Keep the first "Todas" option, remove the rest
+    while (select.children.length > 1) {
+        select.removeChild(select.lastChild);
+    }
+
+    appCategories.forEach(cat => {
+        const option = document.createElement('option');
+        option.value = cat.name;
+        option.textContent = cat.name;
+        select.appendChild(option);
+    });
+}
+
+// ===== Expense form =====
 
 async function handleQuickExpense(e) {
     e.preventDefault();
-    
-    const categoryToggle = document.getElementById('category-toggle');
-    const categoria = categoryToggle.checked ? 'Entretenimiento' : 'Obligatorios';
+
+    const categoria = selectedCategory;
+    if (!categoria) {
+        showNotification('Selecciona una categoría', 'error');
+        return;
+    }
+
     const prorateCheckbox = document.getElementById('prorate-expense');
-    
+
     const montoInput = document.getElementById('quick-monto');
     const montoValue = montoInput.cleaveInstance ? montoInput.cleaveInstance.getRawValue() : parseFormattedNumber(montoInput.value);
-    
+
     const fechaInput = document.getElementById('quick-fecha');
 
     // Get currency multiplier from config (default to 1)
@@ -351,20 +405,20 @@ async function handleQuickExpense(e) {
         prorate: prorateCheckbox.checked,
         fecha: fechaInput.value
     };
-    
+
     if (!gasto.descripcion || !gasto.monto) {
         showNotification('Completa todos los campos', 'error');
         return;
     }
-    
+
     // Disable form and show loading state
     const submitButton = e.target.querySelector('button[type="submit"]');
     const originalButtonText = submitButton.innerHTML;
     submitButton.disabled = true;
-    submitButton.innerHTML = gasto.prorate 
-        ? '<span class="button-spinner"></span> Prorrateando...' 
+    submitButton.innerHTML = gasto.prorate
+        ? '<span class="button-spinner"></span> Prorrateando...'
         : '<span class="button-spinner"></span> Agregando...';
-    
+
     try {
         const response = await authFetch(`${API_URL}/gastos`, {
             method: 'POST',
@@ -374,15 +428,19 @@ async function handleQuickExpense(e) {
             body: JSON.stringify(gasto)
         });
         if (!response) return;
-        
+
         if (response.ok) {
             const result = await response.json();
             e.target.reset();
             // Reset date to today after form reset
             const today = new Date();
             fechaInput.value = today.toISOString().split('T')[0];
+            // Re-select first pill after form reset
+            if (appCategories.length > 0) {
+                selectCategoryPill(appCategories[0].name);
+            }
             loadDashboard();
-            
+
             closeBottomSheet();
 
             if (gasto.prorate && result.message) {
@@ -405,6 +463,8 @@ async function handleQuickExpense(e) {
     }
 }
 
+// ===== Expenses list =====
+
 async function loadExpenses() {
     const categoria = document.getElementById('filter-categoria').value;
     const mes = document.getElementById('filter-mes').value;
@@ -415,31 +475,32 @@ async function loadExpenses() {
     if (!mes && !año) {
         url += `currentPeriod=true&`;
     }
-    if (categoria) url += `categoria=${categoria}&`;
+    if (categoria) url += `categoria=${encodeURIComponent(categoria)}&`;
     if (mes) url += `mes=${mes}&`;
     if (año) url += `año=${año}`;
-    
+
     try {
         const response = await authFetch(url);
         if (!response) return;
         const gastos = await response.json();
-        
+
         const container = document.getElementById('expenses-list-mobile');
         container.innerHTML = '';
-        
+
         if (gastos.length === 0) {
             container.innerHTML = '<div style="text-align: center; color: #6c757d; padding: 40px;">No hay gastos para el período seleccionado</div>';
             return;
         }
-        
+
         gastos.forEach(gasto => {
             const gastoElement = document.createElement('div');
-            gastoElement.className = `expense-item ${gasto.categoria.toLowerCase()}`;
-            
-            const categoriaIcon = gasto.categoria === 'Obligatorios' 
-                ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg>'
-                : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>';
-            
+            gastoElement.className = 'expense-item';
+
+            // Find category info for icon/color
+            const catInfo = appCategories.find(c => c.name === gasto.categoria);
+            const catIcon = catInfo ? catInfo.icon : '💰';
+            const catColor = catInfo ? catInfo.color : '#059669';
+
             gastoElement.innerHTML = `
                 <div class="expense-header">
                     <div class="expense-amount">$${formatNumber(gasto.monto)}</div>
@@ -447,7 +508,7 @@ async function loadExpenses() {
                 </div>
                 <div class="expense-description">${gasto.descripcion}</div>
                 <div class="expense-category">
-                    <span class="category-with-icon">${categoriaIcon} ${gasto.categoria}</span>
+                    <span class="category-with-icon"><span style="margin-right: 4px;">${catIcon}</span> ${gasto.categoria}</span>
                     <button class="delete-btn" onclick="deleteExpense('${gasto._id}')">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polyline points="3,6 5,6 21,6"/>
@@ -458,7 +519,7 @@ async function loadExpenses() {
                     </button>
                 </div>
             `;
-            
+
             container.appendChild(gastoElement);
         });
     } catch (error) {
@@ -469,13 +530,13 @@ async function loadExpenses() {
 
 async function deleteExpense(id) {
     if (!confirm('¿Eliminar este gasto?')) return;
-    
+
     try {
         const response = await authFetch(`${API_URL}/gastos/${id}`, {
             method: 'DELETE'
         });
         if (!response) return;
-        
+
         if (response.ok) {
             loadExpenses();
             loadDashboard();
@@ -489,28 +550,34 @@ async function deleteExpense(id) {
     }
 }
 
+// ===== Config (Settings page) =====
+
+// Track Cleave instances for dynamic category inputs
+let categoryCleaveInstances = {};
+
 async function loadConfig() {
     try {
         const response = await authFetch(`${API_URL}/config`);
         if (!response) return;
         const config = await response.json();
-        
-        const obligatoriosInput = document.getElementById('limite-obligatorios');
-        const entretenimientoInput = document.getElementById('limite-entretenimiento');
-        
-        // Set values using Cleave.js if available
-        if (obligatoriosInput.cleaveInstance) {
-            obligatoriosInput.cleaveInstance.setRawValue(config.limiteObligatorios);
-        } else {
-            obligatoriosInput.value = formatNumberWithSeparators(config.limiteObligatorios);
+
+        // Resolve categories (handle old format migration)
+        let categories = config.categories;
+        if (!categories || categories.length === 0) {
+            categories = [
+                { id: 'obligatorios', name: 'Obligatorios', limit: config.limiteObligatorios || 750000, icon: '🏠', color: '#059669' },
+                { id: 'entretenimiento', name: 'Entretenimiento', limit: config.limiteEntretenimiento || 750000, icon: '😄', color: '#8b5cf6' },
+            ];
         }
-        
-        if (entretenimientoInput.cleaveInstance) {
-            entretenimientoInput.cleaveInstance.setRawValue(config.limiteEntretenimiento);
-        } else {
-            entretenimientoInput.value = formatNumberWithSeparators(config.limiteEntretenimiento);
-        }
-        
+
+        // Store globally
+        appCategories = categories.map(c => ({ id: c.id, name: c.name, icon: c.icon || '💰', color: c.color || '#059669' }));
+        updateCategoryPills();
+        updateCategoryFilterOptions();
+
+        // Render categories in settings
+        renderCategoriesConfig(categories);
+
         // Set week start day if it exists
         if (config.weekStartDay !== undefined) {
             document.getElementById('week-start-day').value = config.weekStartDay;
@@ -535,28 +602,161 @@ async function loadConfig() {
     }
 }
 
-async function handleConfigSave() {
-    const obligatoriosInput = document.getElementById('limite-obligatorios');
-    const entretenimientoInput = document.getElementById('limite-entretenimiento');
-    const multiplierInput = document.getElementById('currency-multiplier');
+function renderCategoriesConfig(categories) {
+    const container = document.getElementById('categories-config-list');
+    container.innerHTML = '';
+    // Clean up old Cleave instances
+    categoryCleaveInstances = {};
 
-    const obligatoriosValue = obligatoriosInput.cleaveInstance ? obligatoriosInput.cleaveInstance.getRawValue() : parseFormattedNumber(obligatoriosInput.value);
-    const entretenimientoValue = entretenimientoInput.cleaveInstance ? entretenimientoInput.cleaveInstance.getRawValue() : parseFormattedNumber(entretenimientoInput.value);
+    categories.forEach((cat, index) => {
+        const row = createCategoryConfigRow(cat, index);
+        container.appendChild(row);
+    });
+}
+
+function createCategoryConfigRow(cat, index) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'settings-card category-config-card';
+    wrapper.dataset.index = index;
+
+    wrapper.innerHTML = `
+        <div class="category-config-header">
+            <div class="category-config-icon-color">
+                <input type="text" class="category-icon-input" value="${cat.icon || '💰'}" maxlength="4" title="Emoji">
+                <input type="color" class="category-color-input" value="${cat.color || '#059669'}" title="Color">
+            </div>
+            <button type="button" class="category-delete-btn" title="Eliminar categoría">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="3,6 5,6 21,6"/>
+                    <path d="M19,6v14a2,2 0,0,1-2,2H7a2,2 0,0,1-2-2V6m3,0V4a2,2 0,0,1,2-2h4a2,2 0,0,1,2,2v2"/>
+                </svg>
+            </button>
+        </div>
+        <div class="settings-row">
+            <label>Nombre</label>
+            <input type="text" class="category-name-input config-text-input" value="${cat.name}" placeholder="Nombre" required>
+        </div>
+        <div class="settings-separator"></div>
+        <div class="settings-row">
+            <label>Límite mensual</label>
+            <div class="config-input">
+                <span class="currency-symbol">$</span>
+                <input type="text" class="category-limit-input" placeholder="0" inputmode="decimal" required>
+            </div>
+        </div>
+    `;
+
+    // Delete button handler
+    const deleteBtn = wrapper.querySelector('.category-delete-btn');
+    deleteBtn.addEventListener('click', () => {
+        if (document.querySelectorAll('.category-config-card').length <= 1) {
+            showNotification('Necesitas al menos una categoría', 'error');
+            return;
+        }
+        wrapper.remove();
+    });
+
+    // Setup Cleave.js for the limit input after it's in the DOM
+    requestAnimationFrame(() => {
+        const limitInput = wrapper.querySelector('.category-limit-input');
+        if (limitInput && typeof Cleave !== 'undefined') {
+            const cleave = new Cleave(limitInput, {
+                numeral: true,
+                numeralThousandsGroupStyle: 'thousand',
+                numeralDecimalMark: ',',
+                delimiter: '.',
+                numeralDecimalScale: 2,
+                numeralPositiveOnly: true
+            });
+            limitInput.cleaveInstance = cleave;
+            cleave.setRawValue(cat.limit);
+        } else if (limitInput) {
+            limitInput.value = formatNumberWithSeparators(cat.limit);
+        }
+    });
+
+    return wrapper;
+}
+
+function addCategoryRow() {
+    const container = document.getElementById('categories-config-list');
+    const index = container.children.length;
+    const newCat = { id: '', name: '', limit: 0, icon: '💰', color: '#059669' };
+    const row = createCategoryConfigRow(newCat, index);
+    container.appendChild(row);
+
+    // Focus the name input
+    requestAnimationFrame(() => {
+        const nameInput = row.querySelector('.category-name-input');
+        if (nameInput) nameInput.focus();
+    });
+}
+
+function slugify(text) {
+    return text
+        .toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '');
+}
+
+function collectCategoriesFromConfig() {
+    const cards = document.querySelectorAll('.category-config-card');
+    const categories = [];
+
+    cards.forEach(card => {
+        const name = card.querySelector('.category-name-input').value.trim();
+        const limitInput = card.querySelector('.category-limit-input');
+        const limitValue = limitInput.cleaveInstance
+            ? limitInput.cleaveInstance.getRawValue()
+            : parseFormattedNumber(limitInput.value);
+        const icon = card.querySelector('.category-icon-input').value.trim() || '💰';
+        const color = card.querySelector('.category-color-input').value || '#059669';
+
+        if (name) {
+            categories.push({
+                id: slugify(name),
+                name: name,
+                limit: parseFloat(limitValue) || 0,
+                icon: icon,
+                color: color,
+            });
+        }
+    });
+
+    return categories;
+}
+
+async function handleConfigSave() {
+    const multiplierInput = document.getElementById('currency-multiplier');
     const multiplierValue = multiplierInput.cleaveInstance ? multiplierInput.cleaveInstance.getRawValue() : parseFormattedNumber(multiplierInput.value);
 
+    const categories = collectCategoriesFromConfig();
+
+    if (categories.length === 0) {
+        showNotification('Necesitas al menos una categoría', 'error');
+        return;
+    }
+
+    // Validate all categories have name and limit
+    for (const cat of categories) {
+        if (!cat.name) {
+            showNotification('Todas las categorías necesitan un nombre', 'error');
+            return;
+        }
+        if (!cat.limit || cat.limit <= 0) {
+            showNotification(`La categoría "${cat.name}" necesita un límite mayor a 0`, 'error');
+            return;
+        }
+    }
+
     const config = {
-        limiteObligatorios: parseFloat(obligatoriosValue),
-        limiteEntretenimiento: parseFloat(entretenimientoValue),
+        categories: categories,
         weekStartDay: parseInt(document.getElementById('week-start-day').value),
         billingCycleStartDay: parseInt(document.getElementById('billing-cycle-start-day').value),
         currencyMultiplier: parseFloat(multiplierValue) || 1
     };
-    
-    if (!config.limiteObligatorios || !config.limiteEntretenimiento) {
-        showNotification('Completa todos los campos', 'error');
-        return;
-    }
-    
+
     try {
         const response = await authFetch(`${API_URL}/config`, {
             method: 'PUT',
@@ -566,9 +766,13 @@ async function handleConfigSave() {
             body: JSON.stringify(config)
         });
         if (!response) return;
-        
+
         if (response.ok) {
             showNotification('✅ Configuración guardada', 'success');
+            // Update global categories
+            appCategories = categories.map(c => ({ id: c.id, name: c.name, icon: c.icon, color: c.color }));
+            updateCategoryPills();
+            updateCategoryFilterOptions();
             loadDashboard();
         } else {
             throw new Error('Error al guardar configuración');
@@ -605,6 +809,8 @@ async function exportToCSV() {
     }
 }
 
+// ===== Utility functions =====
+
 function formatNumber(num) {
     return new Intl.NumberFormat('es-AR', {
         minimumFractionDigits: 2,
@@ -618,13 +824,13 @@ function showNotification(message, type) {
     if (existingNotification) {
         existingNotification.remove();
     }
-    
+
     const notification = document.createElement('div');
     notification.className = `notification ${type}`;
     notification.textContent = message;
-    
+
     document.body.appendChild(notification);
-    
+
     setTimeout(() => {
         notification.remove();
     }, 3000);
@@ -633,19 +839,19 @@ function showNotification(message, type) {
 function populateMonthYearFilters() {
     const mesSelect = document.getElementById('filter-mes');
     const añoSelect = document.getElementById('filter-año');
-    
+
     // Solo poblar si están vacíos
     if (mesSelect.children.length > 1) return;
-    
+
     const monthNames = [
         'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
         'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
     ];
-    
+
     const currentDate = new Date();
     const currentMonth = currentDate.getMonth() + 1;
     const currentYear = currentDate.getFullYear();
-    
+
     // Poblar meses
     monthNames.forEach((month, index) => {
         const option = document.createElement('option');
@@ -656,7 +862,7 @@ function populateMonthYearFilters() {
         }
         mesSelect.appendChild(option);
     });
-    
+
     // Poblar años (últimos 3 años)
     for (let year = currentYear; year >= currentYear - 2; year--) {
         const option = document.createElement('option');
@@ -694,6 +900,23 @@ function setupMoneyInputFormatting(inputId) {
 
     // Store cleave instance for later use
     input.cleaveInstance = cleave;
+}
+
+// Color utility: convert hex to rgba
+function hexToRgba(hex, alpha) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+// Color utility: lighten a hex color
+function lightenColor(hex, percent) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    const lighten = (c) => Math.min(255, Math.round(c + (255 - c) * (percent / 100)));
+    return `#${lighten(r).toString(16).padStart(2, '0')}${lighten(g).toString(16).padStart(2, '0')}${lighten(b).toString(16).padStart(2, '0')}`;
 }
 
 // Logout
