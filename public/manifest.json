@@ -1,6 +1,6 @@
 {
-  "name": "Bolsillo",
-  "short_name": "Bolsillo",
+  "name": "Ledge",
+  "short_name": "Ledge",
   "description": "Controlá tus gastos mensuales con límites semanales",
   "start_url": "/",
   "display": "standalone",

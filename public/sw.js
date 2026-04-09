@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bolsillo-app-v1';
+const CACHE_NAME = 'ledge-app-v1';
 const urlsToCache = [
   '/',
   '/index.html',
