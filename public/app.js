@@ -985,6 +985,22 @@ async function handleLogout() {
     window.location.href = '/login.html';
 }
 
+async function handleDeleteAccount() {
+    if (!confirm('¿Estás seguro de que querés eliminar tu cuenta? Todos tus datos se borrarán permanentemente.')) return;
+    if (!confirm('Esta acción no se puede deshacer. ¿Estás completamente seguro?')) return;
+    try {
+        const res = await authFetch('/api/delete-account', { method: 'DELETE' });
+        if (res && res.ok) {
+            await supabase.auth.signOut();
+            window.location.href = '/login.html';
+        } else {
+            alert('Error eliminando cuenta');
+        }
+    } catch {
+        alert('Error eliminando cuenta');
+    }
+}
+
 // Bottom Sheet
 function setupBottomSheet() {
     document.getElementById('fab-add').addEventListener('click', openBottomSheet);
