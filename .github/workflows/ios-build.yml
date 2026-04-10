@@ -41,7 +41,8 @@ jobs:
         run: |
           BUILD_NUMBER=${{ github.run_number }}
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" ios/App/App/Info.plist
-          echo "Build number set to $BUILD_NUMBER"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.0.1" ios/App/App/Info.plist
+          echo "Build number set to $BUILD_NUMBER, version 1.0.1"
 
       - name: Install Apple certificate and provisioning profile
         env:
